@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CPU Scheduler Simulator</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      padding: 20px;
+      background: linear-gradient(to right, #e0f7fa, #e1bee7);
+      color: #333;
+    }
+    h1 {
+      text-align: center;
+      color: #4a148c;
+    }
+    table {
+      width: 100%;
+      margin-top: 10px;
+      border-collapse: collapse;
+      background: #fff;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 10px;
+      text-align: center;
+    }
+    th {
+      background-color: #ab47bc;
+      color: white;
+    }
+    .controls {
+      margin-bottom: 20px;
+      background: #f3e5f5;
+      padding: 15px;
+      border-radius: 10px;
+      box-shadow: 0 1px 5px rgba(0, 0, 0, 0.1);
+    }
+    input, select, button {
+      margin: 5px;
+      padding: 8px;
+      border-radius: 5px;
+      border: 1px solid #ccc;
+      font-size: 14px;
+    }
+    button {
+      background-color: #8e24aa;
+      color: white;
+      border: none;
+      cursor: pointer;
+      transition: background 0.3s ease;
+    }
+    button:hover {
+      background-color: #6a1b9a;
+    }
+    .gantt-bar {
+      display: inline-block;
+      height: 60px;
+      color: white;
+      text-align: center;
+      margin-right: 2px;
+      padding-top: 20px;
+      font-weight: bold;
+      border-radius: 5px;
+      animation: popIn 0.5s ease;
+      font-size: 16px;
+    }
+    @keyframes popIn {
+      from { transform: scale(0.8); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
+    pre {
+      background: #fce4ec;
+      padding: 15px;
+      border-left: 5px solid #ec407a;
+      border-radius: 5px;
+      font-size: 16px;
+    }
+    #gantt {
+      background: #fff3e0;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 0 5px rgba(0,0,0,0.2);
+      overflow-x: auto;
+      white-space: nowrap;
+    }
+  </style>
+</head>
+<body>
+  <h1>🎯 CPU Scheduler Simulator</h1>
+
+  <div class="controls">
+    <label>Arrival Time: <input type="number" id="arrival"></label>
+    <label>Burst Time: <input type="number" id="burst"></label>
+    <label>Priority: <input type="number" id="priority"></label>
+    <button onclick="addProcess()">➕ Add Process</button>
+  </div>
+
+  <table id="processTable">
+    <tr><th>#</th><th>Arrival Time</th><th>Burst Time</th><th>Priority</th></tr>
+  </table>
+
+  <div class="controls">
+    <label>Algorithm:
+      <select id="algorithm">
+        <option value="FCFS">FCFS</option>
+        <option value="SJF">SJF</option>
+        <option value="Priority">Priority</option>
+        <option value="RR">Round Robin</option>
+      </select>
+    </label>
+    <label id="quantumBox">Quantum: <input type="number" id="quantum" value="2"></label>
+    <button onclick="runSimulation()">🚀 Run Simulation</button>
+  </div>
+
+  <h3>📊 Gantt Chart:</h3>
+  <div id="gantt"></div>
+
+  <h3>📈 Performance Metrics:</h3>
+  <pre id="metrics"></pre>
+
+  <script>
+    let processes = [];
+
+    function addProcess() {
+      const arrival = parseInt(document.getElementById('arrival').value);
+      const burst = parseInt(document.getElementById('burst').value);
+      const priority = parseInt(document.getElementById('priority').value);
+
+      if (isNaN(arrival) || isNaN(burst) || isNaN(priority)) return alert("Enter all fields");
+
+      processes.push({ id: processes.length + 1, arrival, burst, priority });
+      const row = document.getElementById('processTable').insertRow();
+      row.innerHTML = `<td>${processes.length}</td><td>${arrival}</td><td>${burst}</td><td>${priority}</td>`;
+    }
+
+    function runSimulation() {
+      const algo = document.getElementById('algorithm').value;
+      const quantum = parseInt(document.getElementById('quantum').value);
+      const gantt = document.getElementById('gantt');
+      const metrics = document.getElementById('metrics');
+      gantt.innerHTML = '';
+
+      let result = { timeline: [], waiting: [], turnaround: [] };
+
+      if (algo === 'FCFS') {
+        result = fcfsScheduler();
+      } else if (algo === 'SJF') {
+        result = sjfScheduler();
+      } else if (algo === 'Priority') {
+        result = priorityScheduler();
+      } else if (algo === 'RR') {
+        result = rrScheduler(quantum);
+      }
+
+      const colors = ['#4caf50', '#2196f3', '#f44336', '#ff9800', '#9c27b0', '#795548', '#00acc1', '#d81b60'];
+      result.timeline.forEach((d, i) => {
+        const div = document.createElement('div');
+        div.className = 'gantt-bar';
+        div.style.width = `${(d.end - d.start) * 40}px`;
+        div.style.background = colors[d.id % colors.length];
+        div.innerText = `P${d.id}\n${d.start}-${d.end}`;
+        gantt.appendChild(div);
+      });
+
+      const n = processes.length;
+      for (let i = 0; i < n; i++) {
+        result.waiting[i] = result.waiting[i] || 0;
+        result.turnaround[i] = result.turnaround[i] || 0;
+      }
+
+      const avgWait = result.waiting.reduce((a, b) => a + b, 0) / n;
+      const avgTurn = result.turnaround.reduce((a, b) => a + b, 0) / n;
+
+      metrics.innerText = `Average Waiting Time: ${avgWait.toFixed(2)}\nAverage Turnaround Time: ${avgTurn.toFixed(2)}`;
+    }
+
+    function rrScheduler(quantum) {
+      let time = 0;
+      let queue = [];
+      let timeline = [];
+      let waiting = Array(processes.length).fill(0);
+      let turnaround = Array(processes.length).fill(0);
+      let remaining = processes.map(p => ({...p, rem: p.burst}));
+      let arrived = [];
+
+      while (remaining.some(p => p.rem > 0)) {
+        remaining.filter(p => p.arrival <= time && p.rem > 0 && !arrived.includes(p)).forEach(p => {
+          arrived.push(p);
+          queue.push(p);
+        });
+
+        if (queue.length === 0) {
+          time++;
+          continue;
+        }
+
+        const current = queue.shift();
+        const execTime = Math.min(current.rem, quantum);
+        timeline.push({ id: current.id, start: time, end: time + execTime });
+        time += execTime;
+        current.rem -= execTime;
+
+        if (current.rem > 0) {
+          queue.push(current);
+        } else {
+          turnaround[current.id - 1] = time - current.arrival;
+          waiting[current.id - 1] = turnaround[current.id - 1] - current.burst;
+        }
+      }
+
+      return { timeline, waiting, turnaround };
+    }
+
+    function fcfsScheduler() {
+      let timeline = [], waiting = [], turnaround = [];
+      let time = 0;
+      let sorted = [...processes].sort((a, b) => a.arrival - b.arrival);
+      for (let p of sorted) {
+        if (time < p.arrival) time = p.arrival;
+        timeline.push({ id: p.id, start: time, end: time + p.burst });
+        waiting[p.id - 1] = time - p.arrival;
+        turnaround[p.id - 1] = waiting[p.id - 1] + p.burst;
+        time += p.burst;
+      }
+      return { timeline, waiting, turnaround };
+    }
+
+    function sjfScheduler() {
+      let time = 0, completed = 0;
+      let timeline = [], waiting = Array(processes.length).fill(0), turnaround = Array(processes.length).fill(0);
+      let ready = [];
+      let sorted = [...processes].sort((a, b) => a.arrival - b.arrival);
+
+      while (completed < processes.length) {
+        ready = sorted.filter(p => p.arrival <= time && turnaround[p.id - 1] === 0);
+        if (ready.length === 0) {
+          time++;
+          continue;
+        }
+        ready.sort((a, b) => a.burst - b.burst);
+        let p = ready[0];
+        timeline.push({ id: p.id, start: time, end: time + p.burst });
+        waiting[p.id - 1] = time - p.arrival;
+        turnaround[p.id - 1] = waiting[p.id - 1] + p.burst;
+        time += p.burst;
+        completed++;
+      }
+      return { timeline, waiting, turnaround };
+    }
+
+    function priorityScheduler() {
+      let time = 0, completed = 0;
+      let timeline = [], waiting = Array(processes.length).fill(0), turnaround = Array(processes.length).fill(0);
+      let sorted = [...processes].sort((a, b) => a.arrival - b.arrival);
+
+      while (completed < processes.length) {
+        let ready = sorted.filter(p => p.arrival <= time && turnaround[p.id - 1] === 0);
+        if (ready.length === 0) {
+          time++;
+          continue;
+        }
+        ready.sort((a, b) => a.priority - b.priority);
+        let p = ready[0];
+        timeline.push({ id: p.id, start: time, end: time + p.burst });
+        waiting[p.id - 1] = time - p.arrival;
+        turnaround[p.id - 1] = waiting[p.id - 1] + p.burst;
+        time += p.burst;
+        completed++;
+      }
+      return { timeline, waiting, turnaround };
+    }
+
+    document.getElementById('algorithm').addEventListener('change', function () {
+      const showQuantum = this.value === 'RR';
+      document.getElementById('quantumBox').style.display = showQuantum ? 'inline' : 'none';
+    });
+    document.getElementById('quantumBox').style.display = 'none';
+  </script>
+</body>
+</html>
